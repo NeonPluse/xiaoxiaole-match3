@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>消消乐 · Match-3</title>
+<style>
+  :root {
+    --bg1: #1a1a2e;
+    --bg2: #16213e;
+    --panel: rgba(255,255,255,0.08);
+    --panel-border: rgba(255,255,255,0.14);
+    --text: #f5f6fa;
+    --muted: #aab0c3;
+    --accent: #ffd166;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: radial-gradient(1200px 800px at 50% -10%, var(--bg1), var(--bg2));
+    color: var(--text);
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; min-height: 100vh;
+    padding: 16px; user-select: none; -webkit-user-select: none;
+  }
+  .wrap { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  h1 {
+    font-size: 34px; letter-spacing: 6px; font-weight: 800;
+    background: linear-gradient(90deg, #ffd166, #ff6b6b, #6bc5ff, #ffd166);
+    background-size: 300% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: shine 6s linear infinite;
+    text-shadow: 0 0 30px rgba(255,209,102,.25);
+  }
+  @keyframes shine { to { background-position: 300% 0; } }
+
+  .hud {
+    display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;
+  }
+  .stat {
+    background: var(--panel); border: 1px solid var(--panel-border);
+    border-radius: 14px; padding: 10px 22px; text-align: center;
+    min-width: 108px; backdrop-filter: blur(6px);
+  }
+  .stat .label { font-size: 12px; color: var(--muted); letter-spacing: 2px; }
+  .stat .value { font-size: 24px; font-weight: 700; margin-top: 2px; }
+  .stat .value.accent { color: var(--accent); }
+  .stat .value.good { color: #7bed9f; }
+  .stat .value.bad { color: #ff6b6b; }
+
+  .board-wrap {
+    background: var(--panel); border: 1px solid var(--panel-border);
+    border-radius: 20px; padding: 14px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.45), inset 0 0 40px rgba(255,255,255,.03);
+  }
+  #board {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 6px;
+    width: min(88vw, 440px);
+    aspect-ratio: 1;
+  }
+  .cell {
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0; cursor: pointer;
+    position: relative;
+    box-shadow: inset 0 -4px 0 rgba(0,0,0,.18), inset 0 2px 0 rgba(255,255,255,.28), 0 3px 6px rgba(0,0,0,.25);
+    transition: transform .08s ease;
+  }
+  .cell:hover { transform: scale(1.05); }
+  .cell.selected {
+    outline: 3px solid #fff; outline-offset: 1px;
+    animation: pulse .9s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(255,255,255,.55); }
+    50% { box-shadow: 0 0 0 8px rgba(255,255,255,0); }
+  }
+  .cell.pop { animation: pop .32s ease forwards; }
+  @keyframes pop {
+    0% { transform: scale(1); opacity: 1; }
+    45% { transform: scale(1.28); opacity: 1; }
+    100% { transform: scale(0); opacity: 0; }
+  }
+  .cell.fall { transition: transform .35s cubic-bezier(.34,1.3,.5,1); }
+  .cell.swap { transition: transform .22s ease; }
+  .cell .gem { width: 100%; height: 100%; border-radius: 14px; position: relative; overflow: hidden; }
+  .cell .gem::after {
+    content: ""; position: absolute; left: 12%; top: 8%; width: 34%; height: 30%;
+    border-radius: 50%; background: rgba(255,255,255,.5); filter: blur(1px);
+  }
+  .gem-1 { background: linear-gradient(145deg, #ff8a65, #f4511e); }
+  .gem-2 { background: linear-gradient(145deg, #ffd54f, #f9a825); }
+  .gem-3 { background: linear-gradient(145deg, #66bb6a, #2e7d32); }
+  .gem-4 { background: linear-gradient(145deg, #4fc3f7, #0277bd); }
+  .gem-5 { background: linear-gradient(145deg, #9575cd, #512da8); }
+  .gem-6 { background: linear-gradient(145deg, #f06292, #c2185b); }
+  .gem-7 { background: linear-gradient(145deg, #ffab91, #d84315); }
+  .gem-8 { background: linear-gradient(145deg, #4db6ac, #00695c); }
+  .gem-9 { background: linear-gradient(145deg, #90a4ae, #455a64); }
+
+  .ctrl { display: flex; gap: 12px; }
+  button {
+    font-family: inherit; font-size: 15px; font-weight: 600;
+    color: #1a1a2e; background: var(--accent); border: none;
+    padding: 11px 26px; border-radius: 999px; cursor: pointer;
+    transition: transform .1s ease, box-shadow .1s ease;
+    box-shadow: 0 6px 16px rgba(255,209,102,.35);
+  }
+  button:hover { transform: translateY(-2px); }
+  button:active { transform: translateY(0); }
+  button.ghost {
+    background: var(--panel); color: var(--text); border: 1px solid var(--panel-border);
+    box-shadow: none;
+  }
+
+  #toast {
+    position: fixed; top: 22px; left: 50%; transform: translateX(-50%) translateY(-80px);
+    background: rgba(20,20,40,.92); border: 1px solid var(--panel-border);
+    color: var(--text); padding: 12px 28px; border-radius: 999px;
+    font-weight: 600; opacity: 0; transition: all .35s cubic-bezier(.2,1,.3,1);
+    z-index: 50; pointer-events: none;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .modal-mask {
+    position: fixed; inset: 0; background: rgba(10,10,20,.72);
+    display: none; align-items: center; justify-content: center; z-index: 100;
+    backdrop-filter: blur(4px);
+  }
+  .modal-mask.show { display: flex; animation: fadein .25s ease; }
+  @keyframes fadein { from { opacity: 0; } }
+  .modal {
+    background: linear-gradient(160deg, #232348, #17172e);
+    border: 1px solid var(--panel-border); border-radius: 24px;
+    padding: 40px 48px; text-align: center; max-width: 90vw;
+    box-shadow: 0 30px 80px rgba(0,0,0,.6);
+  }
+  .modal h2 { font-size: 34px; margin-bottom: 10px; }
+  .modal p { color: var(--muted); margin-bottom: 26px; font-size: 16px; }
+  .modal .big { font-size: 22px; color: var(--accent); font-weight: 700; }
+  .modal button { font-size: 17px; padding: 13px 40px; }
+  footer { color: var(--muted); font-size: 12px; letter-spacing: 1px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>消 消 乐</h1>
+
+  <div class="hud">
+    <div class="stat"><div class="label">分数</div><div class="value accent" id="score">0</div></div>
+    <div class="stat"><div class="label">目标</div><div class="value" id="goal">1000</div></div>
+    <div class="stat"><div class="label">剩余步数</div><div class="value" id="moves">20</div></div>
+    <div class="stat"><div class="label">最佳</div><div class="value good" id="best">0</div></div>
+  </div>
+
+  <div class="board-wrap">
+    <div id="board"></div>
+  </div>
+
+  <div class="ctrl">
+    <button id="hintBtn" class="ghost">提示</button>
+    <button id="restartBtn" class="ghost">重新开始</button>
+    <button id="soundBtn" class="ghost">🔊 音效</button>
+  </div>
+  <footer>点击两个相邻宝石交换，三个相同即消除 · 支持滑动操作</footer>
+</div>
+
+<div id="toast"></div>
+<div class="modal-mask" id="modal">
+  <div class="modal">
+    <h2 id="modalTitle">🎉 过关啦！</h2>
+    <p id="modalText"></p>
+    <button id="modalBtn">再来一局</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ============ 配置 ============
+  const SIZE = 8;            // 8x8 棋盘
+  const GOAL = 1000;         // 目标分数
+  const MOVES = 20;          // 初始步数
+  const KINDS = 6;           // 宝石颜色数量
+
+  // ============ 状态 ============
+  let board = [];            // board[row][col] = type (1..KINDS) 或 0=空
+  let score = 0;
+  let movesLeft = MOVES;
+  let selected = null;       // {r, c}
+  let isAnimating = false;
+  let gameOver = false;
+  let soundOn = true;
+  let hintCells = [];
+
+  // ============ DOM ============
+  const boardEl = document.getElementById('board');
+  const scoreEl = document.getElementById('score');
+  const goalEl = document.getElementById('goal');
+  const movesEl = document.getElementById('moves');
+  const bestEl = document.getElementById('best');
+  const toastEl = document.getElementById('toast');
+  const modalEl = document.getElementById('modal');
+  const modalTitle = document.getElementById('modalTitle');
+  const modalText = document.getElementById('modalText');
+  const modalBtn = document.getElementById('modalBtn');
+  const hintBtn = document.getElementById('hintBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const soundBtn = document.getElementById('soundBtn');
+
+  goalEl.textContent = GOAL;
+
+  // ============ 音效（Web Audio 合成） ============
+  let actx = null;
+  function ensureAudio() {
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    if (actx && actx.state === 'suspended') actx.resume();
+  }
+  function beep(freq, dur, type, vol, delay) {
+    if (!soundOn || !actx) return;
+    const t = actx.currentTime + (delay || 0);
+    const osc = actx.createOscillator();
+    const gain = actx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(vol || 0.12, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    osc.connect(gain).connect(actx.destination);
+    osc.start(t); osc.stop(t + dur + 0.02);
+  }
+  const sfx = {
+    select: () => beep(660, .08, 'triangle', .08),
+    swap:   () => beep(520, .09, 'sine', .1),
+    bad:    () => beep(200, .14, 'sawtooth', .07),
+    clear:  (n) => { beep(880, .12, 'square', .09); beep(1320, .14, 'square', .07, .06); },
+    combo:  (n) => { const base = 600 + n * 120; beep(base, .12, 'square', .1); beep(base * 1.5, .16, 'square', .09, .08); },
+    win:    () => { [523,659,784,1047].forEach((f,i)=>beep(f,.22,'triangle',.11,i*.13)); },
+    lose:   () => { [392,330,262,196].forEach((f,i)=>beep(f,.25,'sawtooth',.07,i*.14)); },
+  };
+
+  // ============ 棋盘工具 ============
+  function randType() { return 1 + Math.floor(Math.random() * KINDS); }
+
+  // 生成初始棋盘：保证无初始三连
+  function createBoard() {
+    const b = [];
+    for (let r = 0; r < SIZE; r++) {
+      b[r] = [];
+      for (let c = 0; c < SIZE; c++) {
+        let t;
+        do { t = randType(); } while (isMatchAt(b, r, c, t));
+        b[r][c] = t;
+      }
+    }
+    return b;
+  }
+  function isMatchAt(b, r, c, t) {
+    // 横向已有两个相同
+    if (c >= 2 && b[r][c-1] === t && b[r][c-2] === t) return true;
+    // 纵向已有两个相同
+    if (r >= 2 && b[r-1][c] === t && b[r-2][c] === t) return true;
+    return false;
+  }
+
+  // 找出所有消除组（横向/纵向 >=3 连续）
+  function findMatches(b) {
+    const matched = Array.from({length: SIZE}, () => Array(SIZE).fill(false));
+    // 横向
+    for (let r = 0; r < SIZE; r++) {
+      let c = 0;
+      while (c < SIZE) {
+        let e = c + 1;
+        while (e < SIZE && b[r][e] !== 0 && b[r][e] === b[r][c]) e++;
+        if (e - c >= 3) for (let k = c; k < e; k++) matched[r][k] = true;
+        c = e;
+      }
+    }
+    // 纵向
+    for (let c = 0; c < SIZE; c++) {
+      let r = 0;
+      while (r < SIZE) {
+        let e = r + 1;
+        while (e < SIZE && b[e][c] !== 0 && b[e][c] === b[r][c]) e++;
+        if (e - r >= 3) for (let k = r; k < e; k++) matched[k][c] = true;
+        r = e;
+      }
+    }
+    return matched;
+  }
+
+  // 棋盘上是否还有可用移动
+  function hasValidMove(b) {
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        // 与右侧交换
+        if (c + 1 < SIZE) {
+          const tmp = b[r][c]; b[r][c] = b[r][c+1]; b[r][c+1] = tmp;
+          const m = findMatches(b);
+          b[r][c+1] = b[r][c]; b[r][c] = tmp;
+          if (m.some(row => row.some(x => x))) return true;
+        }
+        // 与下方交换
+        if (r + 1 < SIZE) {
+          const tmp = b[r][c]; b[r][c] = b[r+1][c]; b[r+1][c] = tmp;
+          const m = findMatches(b);
+          b[r+1][c] = b[r][c]; b[r][c] = tmp;
+          if (m.some(row => row.some(x => x))) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // 洗牌直到存在可用移动
+  function reshuffle() {
+    let guard = 0;
+    do {
+      board = createBoard();
+      guard++;
+    } while (!hasValidMove(board) && guard < 50);
+  }
+
+  // ============ 渲染 ============
+  function render() {
+    boardEl.innerHTML = '';
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.r = r; cell.dataset.c = c;
+        if (selected && selected.r === r && selected.c === c) cell.classList.add('selected');
+        if (board[r][c] !== 0) {
+          const gem = document.createElement('div');
+          gem.className = 'gem gem-' + board[r][c];
+          cell.appendChild(gem);
+        }
+        boardEl.appendChild(cell);
+      }
+    }
+  }
+
+  // 更新数字 HUD
+  function updateHUD() {
+    scoreEl.textContent = score;
+    movesEl.textContent = movesLeft;
+    movesEl.className = 'value' + (movesLeft <= 5 ? ' bad' : '');
+    const best = +localStorage.getItem('xiaoxiaole_best') || 0;
+    bestEl.textContent = best;
+  }
+
+  // ============ Toast ============
+  let toastTimer = null;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1600);
+  }
+
+  // ============ 主流程 ============
+  // 消除 + 下落 + 补充，支持连锁；返回累计得分
+  async function resolveBoard() {
+    let totalGain = 0;
+    let combo = 0;
+    while (true) {
+      const matched = findMatches(board);
+      const has = matched.some(row => row.some(x => x));
+      if (!has) break;
+      combo++;
+
+      // 统计消除数量并计分
+      let count = 0;
+      for (let r = 0; r < SIZE; r++)
+        for (let c = 0; c < SIZE; c++)
+          if (matched[r][c]) { count++; board[r][c] = 0; }
+
+      const gain = count * 10 * combo;
+      totalGain += gain;
+      score += gain;
+      updateHUD();
+
+      // 播放动画（对空位置播放 pop）
+      animatePop(matched);
+      if (combo > 1) sfx.combo(combo); else sfx.clear(count);
+      toast('消除 ' + count + ' 个 +' + gain + (combo > 1 ? '  连锁 x' + combo : ''));
+      await sleep(360);
+
+      // 下落
+      applyGravity();
+      await sleep(380);
+    }
+    return totalGain;
+  }
+
+  // 重力下落 + 顶部补充新宝石
+  function applyGravity() {
+    for (let c = 0; c < SIZE; c++) {
+      for (let r = SIZE - 1; r >= 0; r--) {
+        if (board[r][c] === 0) {
+          // 找上方第一个非空
+          let nr = r - 1;
+          while (nr >= 0 && board[nr][c] === 0) nr--;
+          if (nr >= 0) {
+            board[r][c] = board[nr][c];
+            board[nr][c] = 0;
+          }
+        }
+      }
+      // 顶部空位填新宝石
+      for (let r = 0; r < SIZE; r++) {
+        if (board[r][c] === 0) {
+          board[r][c] = randType();
+        }
+      }
+    }
+  }
+
+  function animatePop(matched) {
+    const cells = boardEl.children;
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        if (matched[r][c]) {
+          const idx = r * SIZE + c;
+          cells[idx].classList.add('pop');
+        }
+      }
+    }
+  }
+
+  // 交换两个格子（返回是否形成消除）
+  async function trySwap(r1, c1, r2, c2) {
+    // 交换数据
+    const t = board[r1][c1];
+    board[r1][c1] = board[r2][c2];
+    board[r2][c2] = t;
+
+    const matched = findMatches(board);
+    if (!matched.some(row => row.some(x => x))) {
+      // 无消除：换回
+      const t2 = board[r1][c1];
+      board[r1][c1] = board[r2][c2];
+      board[r2][c2] = t2;
+      sfx.bad();
+      toast('不能交换哦');
+      return false;
+    }
+
+    // 有消除：推进步数
+    movesLeft--;
+    updateHUD();
+    sfx.swap();
+    await resolveBoard();
+    return true;
+  }
+
+  // 处理玩家一步
+  async function handleMove(r1, c1, r2, c2) {
+    if (gameOver || isAnimating) return;
+    if (board[r1][c1] === 0 || board[r2][c2] === 0) return;
+    if (Math.abs(r1 - r2) + Math.abs(c1 - c2) !== 1) return; // 必须相邻
+
+    isAnimating = true;
+    selected = null;
+    render();
+    const ok = await trySwap(r1, c1, r2, c2);
+    isAnimating = false;
+
+    if (!ok) {
+      render();
+      return;
+    }
+
+    // 若棋盘无可移动，自动洗牌
+    if (!hasValidMove(board)) {
+      toast('没有可消除的移动，重新洗牌');
+      await sleep(400);
+      reshuffle();
+      render();
+    }
+
+    checkGameState();
+  }
+
+  // 胜负判定
+  function checkGameState() {
+    if (gameOver) return;
+    if (score >= GOAL) {
+      gameOver = true;
+      saveBest();
+      sfx.win();
+      modalTitle.textContent = '🎉 过关啦！';
+      modalText.innerHTML = '目标达成！<br><span class="big">' + score + '</span> 分 · 剩余 ' + movesLeft + ' 步';
+      modalEl.classList.add('show');
+    } else if (movesLeft <= 0) {
+      gameOver = true;
+      saveBest();
+      sfx.lose();
+      modalTitle.textContent = '😅 步数用完了';
+      modalText.innerHTML = '本局得分 <span class="big">' + score + '</span> 分<br>还差 ' + (GOAL - score) + ' 分就达标';
+      modalEl.classList.add('show');
+    }
+  }
+
+  function saveBest() {
+    const best = +localStorage.getItem('xiaoxiaole_best') || 0;
+    if (score > best) {
+      localStorage.setItem('xiaoxiaole_best', String(score));
+      toast('🎊 新纪录！');
+    }
+    updateHUD();
+  }
+
+  // ============ 提示 ============
+  function showHint() {
+    if (gameOver || isAnimating) return;
+    clearHint();
+    // 找一对可交换形成消除的格子
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        if (c + 1 < SIZE) {
+          const t = board[r][c]; board[r][c] = board[r][c+1]; board[r][c+1] = t;
+          const m = findMatches(board);
+          board[r][c+1] = board[r][c]; board[r][c] = t;
+          if (m.some(row => row.some(x => x))) { hintCells = [[r,c],[r,c+1]]; break; }
+        }
+        if (r + 1 < SIZE) {
+          const t = board[r][c]; board[r][c] = board[r+1][c]; board[r+1][c] = t;
+          const m = findMatches(board);
+          board[r+1][c] = board[r][c]; board[r][c] = t;
+          if (m.some(row => row.some(x => x))) { hintCells = [[r,c],[r+1,c]]; break; }
+        }
+      }
+      if (hintCells.length) break;
+    }
+    if (!hintCells.length) { toast('没有可用移动啦，洗牌中…'); reshuffle(); render(); return; }
+    const cells = boardEl.children;
+    hintCells.forEach(([r,c]) => {
+      const el = cells[r * SIZE + c];
+      el.style.boxShadow = '0 0 0 3px #ffd166, 0 0 18px #ffd166';
+    });
+    setTimeout(clearHint, 1400);
+  }
+  function clearHint() {
+    hintCells = [];
+    render();
+  }
+
+  // ============ 交互（点击 + 滑动） ============
+  let touchStart = null;
+  function cellFromEvent(e) {
+    const target = e.target.closest('.cell');
+    if (!target) return null;
+    return { r: +target.dataset.r, c: +target.dataset.c };
+  }
+  function handleClick(e) {
+    if (gameOver || isAnimating) return;
+    const pos = cellFromEvent(e);
+    if (!pos) return;
+    ensureAudio();
+    if (!selected) {
+      selected = pos;
+      sfx.select();
+      render();
+      return;
+    }
+    // 点击同一格：取消选中
+    if (selected.r === pos.r && selected.c === pos.c) {
+      selected = null;
+      render();
+      return;
+    }
+    // 点击不相邻：换选中
+    if (Math.abs(selected.r - pos.r) + Math.abs(selected.c - pos.c) !== 1) {
+      selected = pos;
+      sfx.select();
+      render();
+      return;
+    }
+    // 相邻：交换
+    handleMove(selected.r, selected.c, pos.r, pos.c);
+  }
+
+  // 触摸滑动交换
+  let swipeStart = null;
+  function onTouchStart(e) {
+    if (gameOver || isAnimating) return;
+    const pos = cellFromEvent(e);
+    if (!pos) return;
+    touchStart = pos;
+    swipeStart = pos;
+  }
+  function onTouchEnd(e) {
+    if (!touchStart) return;
+    const pos = cellFromEvent(e.changedTouches[0]);
+    touchStart = null;
+    if (!pos) return;
+    ensureAudio();
+    const dr = pos.r - swipeStart.r, dc = pos.c - swipeStart.c;
+    if (Math.abs(dr) + Math.abs(dc) === 1) {
+      handleMove(swipeStart.r, swipeStart.c, pos.r, pos.c);
+    } else {
+      selected = pos;
+      render();
+    }
+  }
+
+  boardEl.addEventListener('click', handleClick);
+  boardEl.addEventListener('touchstart', onTouchStart, {passive: true});
+  boardEl.addEventListener('touchend', onTouchEnd, {passive: true});
+
+  // ============ 按钮 ============
+  hintBtn.addEventListener('click', () => { ensureAudio(); showHint(); });
+  restartBtn.addEventListener('click', startGame);
+  soundBtn.addEventListener('click', () => {
+    ensureAudio();
+    soundOn = !soundOn;
+    soundBtn.textContent = soundOn ? '🔊 音效' : '🔇 静音';
+  });
+  modalBtn.addEventListener('click', () => {
+    modalEl.classList.remove('show');
+    startGame();
+  });
+
+  // ============ 启动 ============
+  function startGame() {
+    score = 0;
+    movesLeft = MOVES;
+    selected = null;
+    gameOver = false;
+    modalEl.classList.remove('show');
+    reshuffle();
+    render();
+    updateHUD();
+  }
+
+  function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+  startGame();
+})();
+</script>
+</body>
+</html>

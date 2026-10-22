@@ -1,2 +1,52 @@
-# xiaoxiaole-match3
-消消乐三消小游戏 - A colorful match-3 puzzle game (HTML/CSS/JS, no dependencies)
+# 消消乐 · Match-3
+
+一个纯前端实现的三消小游戏，零依赖、开箱即玩。点击或滑动交换相邻宝石，三个相同即可消除，达成目标分数即可过关。
+
+## ✨ 功能
+
+- 🎮 8×8 经典三消棋盘，6 种彩色宝石
+- 👆 点击 / 滑动两种操作方式（PC 和手机都支持）
+- 💥 消除、下落、连锁（Combo）动画
+- 🔊 Web Audio 合成音效（可静音）
+- 🏆 目标分数闯关制，20 步限制
+- 💾 最佳成绩本地存档（localStorage）
+- 💡 一键提示、无可用移动自动洗牌
+- 📱 响应式布局，移动端友好
+
+## 🎯 玩法
+
+1. 点击选中一颗宝石，再点击相邻宝石进行交换（也可直接滑动）
+2. 横向或纵向连成 **3 个及以上** 相同宝石即消除
+3. 连锁消除可获额外加分（x2、x3…）
+4. 20 步内达到 **1000 分** 即为过关
+
+## 🚀 运行
+
+无需安装任何依赖，直接打开 `index.html` 即可游玩：
+
+```bash
+# 方式一：直接用浏览器打开
+open index.html
+
+# 方式二：本地起一个静态服务器
+python -m http.server 8080
+# 然后访问 http://localhost:8080
+```
+
+也可以部署到 GitHub Pages / Vercel / Netlify 等任意静态托管平台。
+
+## 📁 项目结构
+
+```
+.
+├── index.html   # 游戏全部代码（HTML + CSS + JS）
+└── README.md    # 说明文档
+```
+
+## 🛠 技术栈
+
+原生 HTML5 + CSS3 + JavaScript（ES6+），无任何外部依赖。
+
+## 📄 License
+
+MIT
