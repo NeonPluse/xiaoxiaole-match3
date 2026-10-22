@@ -84,7 +84,13 @@
     45% { transform: scale(1.28); opacity: 1; }
     100% { transform: scale(0); opacity: 0; }
   }
-  .cell.fall { transition: transform .35s cubic-bezier(.34,1.3,.5,1); }
+  .cell .gem.fall-in {
+    animation: fallIn .38s cubic-bezier(.3,1.25,.45,1);
+  }
+  @keyframes fallIn {
+    from { transform: translateY(var(--fall-dist, -50px)); }
+    to { transform: translateY(0); }
+  }
   .cell.swap { transition: transform .22s ease; }
   .cell .gem { width: 100%; height: 100%; border-radius: 14px; position: relative; overflow: hidden; }
   .cell .gem::after {
@@ -325,7 +331,10 @@
   }
 
   // ============ 渲染 ============
-  function render() {
+  // fall[r][c] = 该宝石下落的格子数（新生成宝石 >0），用于掉落动画；无则 0
+  function render(fall) {
+    const gap = 6;
+    const cellSize = (boardEl.clientWidth - (SIZE - 1) * gap) / SIZE;
     boardEl.innerHTML = '';
     for (let r = 0; r < SIZE; r++) {
       for (let c = 0; c < SIZE; c++) {
@@ -336,6 +345,10 @@
         if (board[r][c] !== 0) {
           const gem = document.createElement('div');
           gem.className = 'gem gem-' + board[r][c];
+          if (fall && fall[r][c] > 0) {
+            gem.classList.add('fall-in');
+            gem.style.setProperty('--fall-dist', (-fall[r][c] * (cellSize + gap)) + 'px');
+          }
           cell.appendChild(gem);
         }
         boardEl.appendChild(cell);
@@ -389,34 +402,37 @@
       toast('消除 ' + count + ' 个 +' + gain + (combo > 1 ? '  连锁 x' + combo : ''));
       await sleep(360);
 
-      // 下落
-      applyGravity();
+      // 下落 + 重新渲染（含掉落动画，保证画面与数据一致，连锁时也正确）
+      const fall = applyGravity();
+      render(fall);
       await sleep(380);
     }
     return totalGain;
   }
 
-  // 重力下落 + 顶部补充新宝石
+  // 重力下落 + 顶部补充新宝石；返回每格宝石的下落格数（新宝石按从棋盘上方落下计算）
   function applyGravity() {
+    const fall = Array.from({length: SIZE}, () => Array(SIZE).fill(0));
     for (let c = 0; c < SIZE; c++) {
+      // 先压缩非空宝石到底部
+      let write = SIZE - 1;
       for (let r = SIZE - 1; r >= 0; r--) {
-        if (board[r][c] === 0) {
-          // 找上方第一个非空
-          let nr = r - 1;
-          while (nr >= 0 && board[nr][c] === 0) nr--;
-          if (nr >= 0) {
-            board[r][c] = board[nr][c];
-            board[nr][c] = 0;
+        if (board[r][c] !== 0) {
+          if (write !== r) {
+            board[write][c] = board[r][c];
+            board[r][c] = 0;
+            fall[write][c] = write - r;
           }
+          write--;
         }
       }
-      // 顶部空位填新宝石
-      for (let r = 0; r < SIZE; r++) {
-        if (board[r][c] === 0) {
-          board[r][c] = randType();
-        }
+      // 顶部空位填新宝石：记录从上方落下距离
+      for (let r = write; r >= 0; r--) {
+        board[r][c] = randType();
+        fall[r][c] = r + 1; // 视为从棋盘上方对应高度落下
       }
     }
+    return fall;
   }
 
   function animatePop(matched) {
